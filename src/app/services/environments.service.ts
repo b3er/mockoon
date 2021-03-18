@@ -52,6 +52,7 @@ import {
   setInitialEnvironmentsAction,
   startRouteDuplicationToAnotherEnvironmentAction,
   updateEnvironmentAction,
+  updateEnvironmentroutesFilterAction,
   updateRouteAction,
   updateRouteResponseAction
 } from 'src/app/stores/actions';
@@ -131,6 +132,9 @@ export class EnvironmentsService {
           setActiveEnvironmentAction(environmentUUIDOrDirection)
         );
       }
+      this.store.update(
+        updateEnvironmentroutesFilterAction('')
+      );
     }
   }
 
