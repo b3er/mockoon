@@ -12,7 +12,8 @@ import { v1 as uuid } from 'uuid';
 
 @Injectable({ providedIn: 'root' })
 export class SchemasBuilderService {
-  constructor(private dataService: DataService) {}
+  constructor(private dataService: DataService) {
+  }
 
   /**
    * Build a new environment or route response header
@@ -47,7 +48,7 @@ export class SchemasBuilderService {
     return {
       ...cloneDeep(routeResponse),
       uuid: uuid(),
-      label: `${routeResponse.label} (copy)`
+      label: `${ routeResponse.label } (copy)`
     };
   }
 
@@ -62,7 +63,8 @@ export class SchemasBuilderService {
       endpoint: '',
       responses: hasDefaultRouteResponse ? [this.buildRouteResponse()] : [],
       enabled: true,
-      randomResponse: false
+      randomResponse: false,
+      sequentialResponse: false
     };
   }
 

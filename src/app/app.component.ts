@@ -505,7 +505,20 @@ export class AppComponent implements OnInit, AfterViewInit {
   public toggleRandomResponse(randomResponse: boolean) {
     this.store.update(
       updateRouteAction({
-        randomResponse: !randomResponse
+        randomResponse: !randomResponse,
+        sequentialResponse: false
+      })
+    );
+  }
+
+  /**
+   * Enable/disable random response
+   */
+  public toggleSequentialResponse(sequentialResponse: boolean) {
+    this.store.update(
+      updateRouteAction({
+        sequentialResponse: !sequentialResponse,
+        randomResponse: false
       })
     );
   }
