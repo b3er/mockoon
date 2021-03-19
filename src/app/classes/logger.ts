@@ -1,6 +1,10 @@
-import { error as LogError, info as LogInfo } from 'electron-log';
 import { Messages } from 'src/app/constants/messages.constants';
-import { MessageCodes, MessageParams } from 'src/app/models/messages.model';
+import { MainApi } from 'src/app/global';
+import {
+  MessageCodes,
+  MessageLevels,
+  MessageParams
+} from 'src/app/models/messages.model';
 import { ToastsService } from 'src/app/services/toasts.service';
 
 /**
@@ -20,7 +24,7 @@ export class Logger {
    * @param messageParams
    */
   public logMessage(
-    level: 'info' | 'error',
+    level: MessageLevels,
     messageCode: MessageCodes,
     messageParams: MessageParams = { error: { message: '', name: '' } }
   ) {
@@ -40,7 +44,10 @@ export class Logger {
    * @param message
    */
   public info(message: string) {
-    LogInfo(this.buildMessage(message));
+    MainApi.send('APP_LOGS', {
+      type: 'info',
+      message: this.buildMessage(message)
+    });
   }
 
   /**
@@ -50,7 +57,10 @@ export class Logger {
    * @param message
    */
   public error(message: string) {
-    LogError(this.buildMessage(message));
+    MainApi.send('APP_LOGS', {
+      type: 'error',
+      message: this.buildMessage(message)
+    });
   }
 
   private buildMessage(message: string) {

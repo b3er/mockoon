@@ -8,13 +8,12 @@ import {
   ExportDataRoute,
   Route
 } from '@mockoon/commons';
-import { clipboard, remote } from 'electron';
-import { readFile, writeFile } from 'fs';
 import { cloneDeep } from 'lodash';
 import { Logger } from 'src/app/classes/logger';
 import { Config } from 'src/app/config';
 import { AnalyticsEvents } from 'src/app/enums/analytics-events.enum';
 import { Errors } from 'src/app/enums/errors.enum';
+import { MainApi } from 'src/app/global';
 import { OldExport } from 'src/app/models/data.model';
 import { DataService } from 'src/app/services/data.service';
 import { EventsService } from 'src/app/services/events.service';
@@ -35,8 +34,6 @@ const oldVersionsMigrationTable = {
 
 @Injectable({ providedIn: 'root' })
 export class ImportExportService extends Logger {
-  private dialog = remote.dialog;
-  private BrowserWindow = remote.BrowserWindow;
   private logger = new Logger('[SERVICE][IMPORT-EXPORT]');
 
   constructor(
@@ -70,15 +67,14 @@ export class ImportExportService extends Logger {
 
     // dialog not cancelled
     if (filePath) {
-      this.exportDataToFilePath(dataToExport, filePath, (error) => {
-        if (error) {
-          this.toastService.addToast('error', Errors.EXPORT_ERROR);
-        } else {
-          this.logMessage('info', 'EXPORT_SUCCESS');
+      try {
+        await this.exportDataToFilePath(dataToExport, filePath);
+        this.logMessage('info', 'EXPORT_SUCCESS');
 
-          this.eventsService.analyticsEvents.next(AnalyticsEvents.EXPORT_FILE);
-        }
-      });
+        this.eventsService.analyticsEvents.next(AnalyticsEvents.EXPORT_FILE);
+      } catch (error) {
+        this.toastService.addToast('error', Errors.EXPORT_ERROR);
+      }
     }
   }
 
@@ -101,17 +97,16 @@ export class ImportExportService extends Logger {
 
     // dialog not cancelled
     if (filePath) {
-      this.exportDataToFilePath(dataToExport, filePath, (error) => {
-        if (error) {
-          this.toastService.addToast('error', Errors.EXPORT_ERROR);
-        } else {
-          this.logMessage('info', 'EXPORT_SELECTED_SUCCESS');
+      try {
+        await this.exportDataToFilePath(dataToExport, filePath);
+        this.logMessage('info', 'EXPORT_SELECTED_SUCCESS');
 
-          this.eventsService.analyticsEvents.next(
-            AnalyticsEvents.EXPORT_FILE_SELECTED
-          );
-        }
-      });
+        this.eventsService.analyticsEvents.next(
+          AnalyticsEvents.EXPORT_FILE_SELECTED
+        );
+      } catch (error) {
+        this.toastService.addToast('error', Errors.EXPORT_ERROR);
+      }
     }
   }
 
@@ -129,7 +124,8 @@ export class ImportExportService extends Logger {
 
     try {
       // reset environment before exporting
-      clipboard.writeText(
+      MainApi.send(
+        'APP_WRITE_CLIPBOARD',
         this.prepareExport({
           data: cloneDeep(environment),
           subject: 'environment'
@@ -162,7 +158,8 @@ export class ImportExportService extends Logger {
     const environment = this.store.getActiveEnvironment();
 
     try {
-      clipboard.writeText(
+      MainApi.send(
+        'APP_WRITE_CLIPBOARD',
         this.prepareExport({
           data: cloneDeep(
             environment.routes.find((route) => route.uuid === routeUUID)
@@ -187,31 +184,26 @@ export class ImportExportService extends Logger {
   public async importFromFile() {
     this.logger.info('Importing from file');
 
-    const dialogResult = await this.dialog.showOpenDialog(
-      this.BrowserWindow.getFocusedWindow(),
-      {
-        filters: [{ name: 'JSON', extensions: ['json'] }],
-        title: 'Import from file (JSON)'
-      }
-    );
+    const dialogResult = await MainApi.invoke('APP_SHOW_OPEN_DIALOG', {
+      filters: [{ name: 'JSON', extensions: ['json'] }],
+      title: 'Import from file (JSON)'
+    });
 
     if (dialogResult.filePaths && dialogResult.filePaths[0]) {
       try {
-        readFile(dialogResult.filePaths[0], 'utf-8', (error, fileContent) => {
-          if (error) {
-            this.toastService.addToast('error', Errors.IMPORT_ERROR);
-          } else {
-            const importedData: Export & OldExport = JSON.parse(fileContent);
+        const fileContent = await MainApi.invoke(
+          'APP_READ_FILE',
+          dialogResult.filePaths[0]
+        );
 
-            this.import(importedData);
+        const importedData: Export & OldExport = JSON.parse(fileContent);
 
-            this.eventsService.analyticsEvents.next(
-              AnalyticsEvents.IMPORT_FILE
-            );
-          }
-        });
+        this.import(importedData);
+
+        this.eventsService.analyticsEvents.next(AnalyticsEvents.IMPORT_FILE);
       } catch (error) {
         this.logger.error(`Error while importing from file: ${error.message}`);
+        this.toastService.addToast('error', Errors.IMPORT_ERROR);
       }
     }
   }
@@ -219,11 +211,13 @@ export class ImportExportService extends Logger {
   /**
    * Load data from clipboard and import
    */
-  public importFromClipboard() {
+  public async importFromClipboard() {
     this.logger.info('Importing from clipboard');
 
     try {
-      const importedData: Export & OldExport = JSON.parse(clipboard.readText());
+      const importedData: Export & OldExport = JSON.parse(
+        await MainApi.invoke('APP_READ_CLIPBOARD')
+      );
 
       this.import(importedData);
 
@@ -244,10 +238,9 @@ export class ImportExportService extends Logger {
   public async importOpenAPIFile() {
     this.logger.info('Importing OpenAPI file');
 
-    const dialogResult = await this.dialog.showOpenDialog(
-      this.BrowserWindow.getFocusedWindow(),
-      { filters: [{ name: 'OpenAPI v2/v3', extensions: ['yaml', 'json'] }] }
-    );
+    const dialogResult = await MainApi.invoke('APP_SHOW_OPEN_DIALOG', {
+      filters: [{ name: 'OpenAPI v2/v3', extensions: ['yaml', 'json'] }]
+    });
 
     if (dialogResult.filePaths && dialogResult.filePaths[0]) {
       const environment = await this.openAPIConverterService.import(
@@ -279,20 +272,14 @@ export class ImportExportService extends Logger {
     // dialog not cancelled
     if (filePath) {
       try {
-        writeFile(
+        await MainApi.invoke(
+          'APP_WRITE_FILE',
           filePath,
-          this.openAPIConverterService.export(activeEnvironment),
-          (error) => {
-            if (error) {
-              this.toastService.addToast('error', Errors.EXPORT_ERROR);
-            } else {
-              this.logMessage('info', 'EXPORT_SUCCESS');
-              this.eventsService.analyticsEvents.next(
-                AnalyticsEvents.EXPORT_FILE
-              );
-            }
-          }
+          this.openAPIConverterService.export(activeEnvironment)
         );
+
+        this.logMessage('info', 'EXPORT_SUCCESS');
+        this.eventsService.analyticsEvents.next(AnalyticsEvents.EXPORT_FILE);
       } catch (error) {
         this.logger.info(
           `Error while exporting to OpenAPI file: ${error.message}`
@@ -308,14 +295,13 @@ export class ImportExportService extends Logger {
    *
    * @param dataToExport
    * @param filePath
-   * @param callback
    */
-  private exportDataToFilePath(dataToExport, filePath, callback) {
+  private async exportDataToFilePath(dataToExport, filePath) {
     try {
-      writeFile(
+      await MainApi.invoke(
+        'APP_WRITE_FILE',
         filePath,
-        this.prepareExport({ data: dataToExport, subject: 'environment' }),
-        callback
+        this.prepareExport({ data: dataToExport, subject: 'environment' })
       );
     } catch (error) {
       this.logger.error(`Error while exporting environments: ${error.message}`);
@@ -487,13 +473,10 @@ export class ImportExportService extends Logger {
    * Open the save dialog
    */
   private async openSaveDialog(title: string): Promise<string | null> {
-    const dialogResult = await this.dialog.showSaveDialog(
-      this.BrowserWindow.getFocusedWindow(),
-      {
-        filters: [{ name: 'JSON', extensions: ['json'] }],
-        title
-      }
-    );
+    const dialogResult = await MainApi.invoke('APP_SHOW_SAVE_DIALOG', {
+      filters: [{ name: 'JSON', extensions: ['json'] }],
+      title
+    });
 
     if (dialogResult.canceled) {
       return null;

@@ -100,6 +100,10 @@
       "files": ["*.html"],
       "extends": ["plugin:@angular-eslint/template/recommended"],
       "rules": {}
+    },
+    {
+      "files": ["*.js"],
+      "parserOptions": { "ecmaVersion": 2017 }
     }
   ]
 }

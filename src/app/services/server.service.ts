@@ -1,5 +1,5 @@
 import { Injectable } from '@angular/core';
-import { Environment, MockoonServer, Transaction } from '@mockoon/commons';
+import { Environment, Transaction } from '@mockoon/commons';
 import { Logger } from 'src/app/classes/logger';
 import { AnalyticsEvents } from 'src/app/enums/analytics-events.enum';
 import { MessageParams } from 'src/app/models/messages.model';
@@ -14,7 +14,7 @@ import { Store } from 'src/app/stores/store';
 
 @Injectable({ providedIn: 'root' })
 export class ServerService extends Logger {
-  private runningInstances: { [key: string]: MockoonServer } = {};
+  private runningInstances: { [key: string]: any /* MockoonServer */ } = {};
 
   constructor(
     protected toastService: ToastsService,
@@ -31,7 +31,8 @@ export class ServerService extends Logger {
    * @param environment
    */
   public start(environment: Environment) {
-    const server = new MockoonServer(environment, {
+    //TODO
+    /* const server = new MockoonServer(environment, {
       refreshEnvironmentFunction: (environmentUUID) =>
         this.store.getEnvironmentByUUID(environmentUUID),
       duplicatedRouteUUIDs: this.store.get('duplicatedRoutes')[environment.uuid]
@@ -39,7 +40,7 @@ export class ServerService extends Logger {
 
     this.addListeners(server, environment);
 
-    server.start();
+    server.start(); */
   }
 
   /**
@@ -59,7 +60,10 @@ export class ServerService extends Logger {
    * @param server
    * @param environment
    */
-  private addListeners(server: MockoonServer, environment: Environment) {
+  private addListeners(
+    server: any /* MockoonServer */,
+    environment: Environment
+  ) {
     const loggerMessageParams: MessageParams = {
       port: environment.port,
       uuid: environment.uuid,
@@ -114,7 +118,10 @@ export class ServerService extends Logger {
 
     server.on('transaction-complete', (transaction: Transaction) => {
       this.store.update(
-        logRequestAction(environment.uuid, this.dataService.formatLog(transaction))
+        logRequestAction(
+          environment.uuid,
+          this.dataService.formatLog(transaction)
+        )
       );
     });
   }

@@ -1,5 +1,6 @@
 import { ServerErrorCodes } from '@mockoon/commons';
 
+export type MessageLevels = 'error' | 'info';
 export type MessageParams = { [key: string]: any; error?: Error };
 export type MessageCodes =
   | keyof typeof ServerErrorCodes

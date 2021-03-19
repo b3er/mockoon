@@ -394,8 +394,8 @@
 
                   <div>
                     &nbsp;<small *ngIf="activeRouteResponse.filePath" class="text-muted">Detected MIME type:
-                      {{getFileMimeType(activeRouteResponse.filePath).mimeType}} <span
-                        *ngIf="getFileMimeType(activeRouteResponse.filePath).supportsTemplating"> - Supports
+                      {{(activeResponseFileMimeType$ | async)?.mimeType || 'unknown'}} <span
+                        *ngIf="(activeResponseFileMimeType$ | async)?.supportsTemplating"> - Supports
                         templating
                         <span (click)="openWikiLink('templating')"
                           class="pl-2 btn btn-link text-primary cp doc-link"><i

@@ -6,8 +6,8 @@ import {
   OnInit,
   Output
 } from '@angular/core';
-import { shell } from 'electron';
 import { Config } from 'src/app/config';
+import { MainApi } from 'src/app/global';
 
 /**
  * Heading and subheading can be passed through simple string inputs or
@@ -44,7 +44,7 @@ export class TitleSeparatorComponent implements OnInit {
   ngOnInit() {}
 
   public linkClick() {
-    shell.openExternal(Config.docs[this.docLink]);
+    MainApi.send('APP_OPEN_EXTERNAL_LINK', Config.docs[this.docLink]);
   }
 
   public iconClick() {

@@ -5,9 +5,9 @@ import {
   OnInit,
   ViewChild
 } from '@angular/core';
-import { FakerLocales } from '@mockoon/commons';
 import { NgbModal } from '@ng-bootstrap/ng-bootstrap';
 import { Observable } from 'rxjs';
+import { FakerLocales } from 'src/app/constants/faker.constants';
 import { Settings } from 'src/app/models/settings.model';
 import { SettingsService } from 'src/app/services/settings.service';
 import { Store } from 'src/app/stores/store';

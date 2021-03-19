@@ -1,18 +1,23 @@
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 
-const logs = require('electron-log');
-logs.catchErrors();
-
 const objectPath = require('object-path');
-const electron = require('electron');
+const {
+  clipboard,
+  dialog,
+  BrowserWindow,
+  ipcMain,
+  shell,
+  app,
+  Menu
+} = require('electron');
 const windowState = require('electron-window-state');
 const path = require('path');
+const { promisify } = require('util');
 const isDev = require('electron-is-dev');
+const { get: storageGet, set: storageSet } = require('electron-json-storage');
+const { lookup: mimeTypeLookup } = require('mime-types');
+const { promises: fsPromises } = require('fs');
 
-const app = electron.app;
-const ipcMain = electron.ipcMain;
-const shell = electron.shell;
-const browserWindow = electron.BrowserWindow;
 let mainWindow;
 let splashScreen;
 
@@ -30,13 +35,16 @@ if (isTesting || isDev) {
   app.setPath('userData', path.resolve('./tmp'));
 }
 
+const log = require('electron-log');
+log.catchErrors();
+
 // when serving (devmode) enable hot reloading
 if (isDev && isServing) {
   require('electron-reload')(__dirname, {});
 }
 
 const createSplashScreen = function () {
-  splashScreen = new browserWindow({
+  splashScreen = new BrowserWindow({
     width: 450,
     maxWidth: 450,
     minWidth: 450,
@@ -52,6 +60,7 @@ const createSplashScreen = function () {
     movable: true,
     maximizable: false,
     minimizable: false,
+    backgroundColor: '#3C637C',
     icon: path.join(__dirname, '/icon_512x512x32.png')
   });
 
@@ -75,7 +84,9 @@ const createAppMenu = function () {
           label: 'Settings',
           accelerator: 'CmdOrCtrl+,',
           click: function () {
-            mainWindow.webContents.send('keydown', { action: 'OPEN_SETTINGS' });
+            mainWindow.webContents.send('APP_MENU', {
+              action: 'OPEN_SETTINGS'
+            });
           }
         },
         { type: 'separator' }
@@ -121,14 +132,16 @@ const createAppMenu = function () {
         label: 'Add new environment',
         accelerator: 'Shift+CmdOrCtrl+E',
         click: function () {
-          mainWindow.webContents.send('keydown', { action: 'NEW_ENVIRONMENT' });
+          mainWindow.webContents.send('APP_MENU', {
+            action: 'NEW_ENVIRONMENT'
+          });
         }
       },
       {
         label: 'Add new route',
         accelerator: 'Shift+CmdOrCtrl+R',
         click: function () {
-          mainWindow.webContents.send('keydown', { action: 'NEW_ROUTE' });
+          mainWindow.webContents.send('APP_MENU', { action: 'NEW_ROUTE' });
         }
       },
       { type: 'separator' },
@@ -136,7 +149,7 @@ const createAppMenu = function () {
         label: 'Duplicate current environment',
         accelerator: 'CmdOrCtrl+D',
         click: function () {
-          mainWindow.webContents.send('keydown', {
+          mainWindow.webContents.send('APP_MENU', {
             action: 'DUPLICATE_ENVIRONMENT'
           });
         }
@@ -145,7 +158,9 @@ const createAppMenu = function () {
         label: 'Duplicate current route',
         accelerator: 'Shift+CmdOrCtrl+D',
         click: function () {
-          mainWindow.webContents.send('keydown', { action: 'DUPLICATE_ROUTE' });
+          mainWindow.webContents.send('APP_MENU', {
+            action: 'DUPLICATE_ROUTE'
+          });
         }
       },
       { type: 'separator' },
@@ -153,7 +168,7 @@ const createAppMenu = function () {
         label: 'Delete current environment',
         accelerator: 'Alt+CmdOrCtrl+U',
         click: function () {
-          mainWindow.webContents.send('keydown', {
+          mainWindow.webContents.send('APP_MENU', {
             action: 'DELETE_ENVIRONMENT'
           });
         }
@@ -162,7 +177,7 @@ const createAppMenu = function () {
         label: 'Delete current route',
         accelerator: 'Alt+Shift+CmdOrCtrl+U',
         click: function () {
-          mainWindow.webContents.send('keydown', { action: 'DELETE_ROUTE' });
+          mainWindow.webContents.send('APP_MENU', { action: 'DELETE_ROUTE' });
         }
       },
       { type: 'separator' },
@@ -170,7 +185,7 @@ const createAppMenu = function () {
         label: 'Start/Stop/Reload current environment',
         accelerator: 'Shift+CmdOrCtrl+S',
         click: function () {
-          mainWindow.webContents.send('keydown', {
+          mainWindow.webContents.send('APP_MENU', {
             action: 'START_ENVIRONMENT'
           });
         }
@@ -179,7 +194,7 @@ const createAppMenu = function () {
         label: 'Start/Stop/Reload all environments',
         accelerator: 'Shift+CmdOrCtrl+A',
         click: function () {
-          mainWindow.webContents.send('keydown', {
+          mainWindow.webContents.send('APP_MENU', {
             action: 'START_ALL_ENVIRONMENTS'
           });
         }
@@ -189,7 +204,7 @@ const createAppMenu = function () {
         label: 'Select previous environment',
         accelerator: 'CmdOrCtrl+Up',
         click: function () {
-          mainWindow.webContents.send('keydown', {
+          mainWindow.webContents.send('APP_MENU', {
             action: 'PREVIOUS_ENVIRONMENT'
           });
         }
@@ -198,7 +213,7 @@ const createAppMenu = function () {
         label: 'Select next environment',
         accelerator: 'CmdOrCtrl+Down',
         click: function () {
-          mainWindow.webContents.send('keydown', {
+          mainWindow.webContents.send('APP_MENU', {
             action: 'NEXT_ENVIRONMENT'
           });
         }
@@ -207,14 +222,14 @@ const createAppMenu = function () {
         label: 'Select previous route',
         accelerator: 'Shift+CmdOrCtrl+Up',
         click: function () {
-          mainWindow.webContents.send('keydown', { action: 'PREVIOUS_ROUTE' });
+          mainWindow.webContents.send('APP_MENU', { action: 'PREVIOUS_ROUTE' });
         }
       },
       {
         label: 'Select next route',
         accelerator: 'Shift+CmdOrCtrl+Down',
         click: function () {
-          mainWindow.webContents.send('keydown', { action: 'NEXT_ROUTE' });
+          mainWindow.webContents.send('APP_MENU', { action: 'NEXT_ROUTE' });
         }
       }
     ]
@@ -229,7 +244,7 @@ const createAppMenu = function () {
           {
             label: 'Import from clipboard',
             click: function () {
-              mainWindow.webContents.send('keydown', {
+              mainWindow.webContents.send('APP_MENU', {
                 action: 'IMPORT_CLIPBOARD'
               });
             }
@@ -237,20 +252,24 @@ const createAppMenu = function () {
           {
             label: 'Import from a file (JSON)',
             click: function () {
-              mainWindow.webContents.send('keydown', { action: 'IMPORT_FILE' });
+              mainWindow.webContents.send('APP_MENU', {
+                action: 'IMPORT_FILE'
+              });
             }
           },
           {
             label: 'Export all environments to a file (JSON)',
             accelerator: 'CmdOrCtrl+O',
             click: function () {
-              mainWindow.webContents.send('keydown', { action: 'EXPORT_FILE' });
+              mainWindow.webContents.send('APP_MENU', {
+                action: 'EXPORT_FILE'
+              });
             }
           },
           {
             label: 'Export current environment to a file (JSON)',
             click: function () {
-              mainWindow.webContents.send('keydown', {
+              mainWindow.webContents.send('APP_MENU', {
                 action: 'EXPORT_FILE_SELECTED'
               });
             }
@@ -264,7 +283,7 @@ const createAppMenu = function () {
           {
             label: 'Import Swagger v2/OpenAPI v3 (JSON or YAML)',
             click: function () {
-              mainWindow.webContents.send('keydown', {
+              mainWindow.webContents.send('APP_MENU', {
                 action: 'IMPORT_OPENAPI_FILE'
               });
             }
@@ -272,7 +291,7 @@ const createAppMenu = function () {
           {
             label: 'Export current environment to OpenAPI v3 (JSON)',
             click: function () {
-              mainWindow.webContents.send('keydown', {
+              mainWindow.webContents.send('APP_MENU', {
                 action: 'EXPORT_OPENAPI_FILE'
               });
             }
@@ -338,7 +357,7 @@ const createAppMenu = function () {
       {
         label: 'Release notes',
         click: function () {
-          mainWindow.webContents.send('keydown', {
+          mainWindow.webContents.send('APP_MENU', {
             action: 'OPEN_CHANGELOG'
           });
         }
@@ -360,7 +379,7 @@ const init = function () {
     defaultHeight: 768
   });
 
-  mainWindow = new browserWindow({
+  mainWindow = new BrowserWindow({
     x: mainWindowState.x,
     y: mainWindowState.y,
     minWidth: 1024,
@@ -376,10 +395,13 @@ const init = function () {
     // directly show the main window when running the tests
     show: isTesting ? true : false,
     webPreferences: {
-      nodeIntegration: true,
+      nodeIntegration: false,
       devTools: isDev ? true : false,
-      enableRemoteModule: true,
-      spellcheck: false
+      enableRemoteModule: false,
+      contextIsolation: true,
+      spellcheck: false,
+      preload: path.join(__dirname, '/preload.js'),
+      sandbox: false
     }
   });
 
@@ -389,24 +411,30 @@ const init = function () {
     mainWindow.show();
   } else {
     // when main app finished loading, hide splashscreen and show the mainWindow
-    mainWindow.webContents.on('did-finish-load', () => {
-      if (splashScreen) {
-        splashScreen.close();
-      }
+    // use two timeout as page is still assembling after "dom-ready" event
+    mainWindow.webContents.on('dom-ready', () => {
+      setTimeout(() => {
+        if (splashScreen) {
+          splashScreen.close();
+        }
 
-      mainWindowState.manage(mainWindow);
-      // ensure focus, as manage function does not necessarily focus
-      mainWindow.show();
+        // adding a timeout diff (100ms) between splashscreen close and mainWindow.show to fix a bug: https://github.com/electron/electron/issues/27353
+        setTimeout(() => {
+          mainWindowState.manage(mainWindow);
+          // ensure focus, as manage function does not necessarily focus
+          mainWindow.show();
+
+          // Open the DevTools in dev mode except when running functional tests
+          if (isDev && !isTesting) {
+            mainWindow.webContents.openDevTools();
+          }
+        }, 100);
+      }, 500);
     });
   }
 
   // and load the index.html of the app.
   mainWindow.loadURL(`file://${__dirname}/index.html`);
-
-  // Open the DevTools in dev mode except when running functional tests
-  if (isDev && !isTesting) {
-    mainWindow.webContents.openDevTools();
-  }
 
   // intercept all links and open in a new window
   mainWindow.webContents.on('new-window', (event, targetUrl) => {
@@ -425,13 +453,11 @@ const init = function () {
     mainWindow = null;
   });
 
-  electron.Menu.setApplicationMenu(
-    electron.Menu.buildFromTemplate(createAppMenu())
-  );
+  Menu.setApplicationMenu(Menu.buildFromTemplate(createAppMenu()));
 };
 
 const toggleExportMenuItems = function (state) {
-  const menu = electron.Menu.getApplicationMenu();
+  const menu = Menu.getApplicationMenu();
 
   if (
     menu &&
@@ -458,24 +484,89 @@ app.on('window-all-closed', function () {
   }
 });
 
-// Quit requested by renderer (when waiting for save to finish)
-ipcMain.on('renderer-app-quit', function () {
-  // destroy the window otherwise app.quit() will trigger beforeunload again. Also there is no app.quit for macos
-  mainWindow.destroy();
-});
-
-ipcMain.on('disable-export', function () {
-  toggleExportMenuItems(false);
-});
-
-ipcMain.on('enable-export', function () {
-  toggleExportMenuItems(true);
-});
-
 app.on('activate', function () {
   // On OS X it's common to re-create a window in the app when the
   // dock icon is clicked and there are no other windows open.
   if (mainWindow === null) {
     init();
   }
+});
+
+// Quit requested by renderer (when waiting for save to finish)
+ipcMain.on('APP_QUIT', function () {
+  // destroy the window otherwise app.quit() will trigger beforeunload again. Also there is no app.quit for macos
+  mainWindow.destroy();
+});
+
+ipcMain.on('APP_DISABLE_EXPORT', () => {
+  toggleExportMenuItems(false);
+});
+
+ipcMain.on('APP_ENABLE_EXPORT', () => {
+  toggleExportMenuItems(true);
+});
+
+ipcMain.on('APP_LOGS', (event, data) => {
+  if (data.type === 'info') {
+    log.info(data.message);
+  } else if (data.type === 'error') {
+    log.error(data.message);
+  }
+});
+
+ipcMain.on('APP_OPEN_EXTERNAL_LINK', (event, url) => {
+  shell.openExternal(url);
+});
+
+ipcMain.handle('APP_READ_JSON_DATA', async (event, key) => {
+  console.log('read data', key);
+  //return await Promise.reject('cannot load');
+
+  return await promisify(storageGet)(key);
+});
+
+ipcMain.handle('APP_WRITE_JSON_DATA', async (event, key, data) => {
+  console.log('write data', key);
+
+  return await promisify(storageSet)(key, data);
+});
+
+ipcMain.handle('APP_READ_FILE', async (event, path) => {
+  console.log('read file', path);
+
+  return await fsPromises.readFile(path, 'utf-8');
+});
+
+ipcMain.handle('APP_WRITE_FILE', async (event, path, data) => {
+  console.log('write file', path);
+
+  return await fsPromises.writeFile(path, data, 'utf-8');
+});
+
+ipcMain.handle('APP_READ_CLIPBOARD', async (event) => {
+  console.log('clipboard read');
+
+  return clipboard.readText('clipboard');
+});
+
+ipcMain.handle('APP_SHOW_OPEN_DIALOG', async (event, options) => {
+  return await dialog.showOpenDialog(BrowserWindow.getFocusedWindow(), options);
+});
+
+ipcMain.handle('APP_SHOW_SAVE_DIALOG', async (event, options) => {
+  return await dialog.showSaveDialog(BrowserWindow.getFocusedWindow(), options);
+});
+
+ipcMain.handle('APP_GET_PLATFORM', (event) => {
+  return process.platform;
+});
+
+ipcMain.handle('APP_GET_MIME_TYPE', (event, path) => {
+  return mimeTypeLookup(path);
+});
+
+ipcMain.on('APP_WRITE_CLIPBOARD', async (event, data) => {
+  console.log('clipboard write');
+
+  clipboard.writeText(data, 'clipboard');
 });

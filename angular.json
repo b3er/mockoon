@@ -43,6 +43,11 @@
                 "output": "/"
               },
               {
+                "glob": "preload.js",
+                "input": "src",
+                "output": "/"
+              },
+              {
                 "glob": "splashscreen.html",
                 "input": "src",
                 "output": "/"

@@ -20,14 +20,14 @@ import {
   RouteResponse
 } from '@mockoon/commons';
 import { NgbConfig, NgbTooltipConfig } from '@ng-bootstrap/ng-bootstrap';
-import { ipcRenderer, remote, shell } from 'electron';
-import { lookup as mimeTypeLookup } from 'mime-types';
-import { merge, Observable, Subject, Subscription } from 'rxjs';
+import { from, merge, Observable, Subject, Subscription } from 'rxjs';
 import {
   distinctUntilChanged,
   distinctUntilKeyChanged,
   filter,
   map,
+  mergeMap,
+  pluck,
   tap
 } from 'rxjs/operators';
 import { Logger } from 'src/app/classes/logger';
@@ -39,6 +39,7 @@ import { INDENT_SIZE } from 'src/app/constants/common.constants';
 import { methods, statusCodes } from 'src/app/constants/routes.constants';
 import { AnalyticsEvents } from 'src/app/enums/analytics-events.enum';
 import { FocusableInputs } from 'src/app/enums/ui.enum';
+import { MainApi } from 'src/app/global';
 import { HeadersProperties } from 'src/app/models/common.model';
 import { ContextMenuItemPayload } from 'src/app/models/context-menu.model';
 import { DataSubject } from 'src/app/models/data.model';
@@ -48,11 +49,11 @@ import {
 } from 'src/app/models/environment-logs.model';
 import { Toast } from 'src/app/models/toasts.model';
 import { AnalyticsService } from 'src/app/services/analytics.service';
+import { ApiService } from 'src/app/services/api.service';
 import { AuthService } from 'src/app/services/auth.service';
 import { EnvironmentsService } from 'src/app/services/environments.service';
 import { EventsService } from 'src/app/services/events.service';
 import { ImportExportService } from 'src/app/services/import-export.service';
-import { IpcService } from 'src/app/services/ipc.service';
 import { StorageService } from 'src/app/services/storage.service';
 import { ToastsService } from 'src/app/services/toasts.service';
 import { UIService } from 'src/app/services/ui.service';
@@ -87,6 +88,10 @@ export class AppComponent implements OnInit, AfterViewInit {
   public activeRoute$: Observable<Route>;
   public activeRouteForm: FormGroup;
   public activeRouteResponse$: Observable<RouteResponse>;
+  public activeResponseFileMimeType$: Observable<{
+    mimeType: string;
+    supportsTemplating: boolean;
+  }>;
   public activeRouteResponseForm: FormGroup;
   public activeRouteResponseIndex$: Observable<number>;
   public activeRouteResponseLastLog$: Observable<EnvironmentLog>;
@@ -109,8 +114,6 @@ export class AppComponent implements OnInit, AfterViewInit {
   public toasts$: Observable<Toast[]>;
   public focusableInputs = FocusableInputs;
   private injectHeaders$ = new Subject<Header[]>();
-  private BrowserWindow = remote.BrowserWindow;
-  private dialog = remote.dialog;
   private logger = new Logger('[COMPONENT][APP]');
   private closingSubscription: Subscription;
 
@@ -125,7 +128,7 @@ export class AppComponent implements OnInit, AfterViewInit {
     private store: Store,
     private toastService: ToastsService,
     private uiService: UIService,
-    private ipcService: IpcService,
+    private apiService: ApiService,
     private storageService: StorageService,
     private ngbConfig: NgbConfig
   ) {
@@ -146,7 +149,7 @@ export class AppComponent implements OnInit, AfterViewInit {
           .pipe(
             filter((saving) => !saving),
             tap(() => {
-              ipcRenderer.send('renderer-app-quit');
+              MainApi.send('APP_QUIT');
               window.onbeforeunload = null;
             })
           )
@@ -179,6 +182,18 @@ export class AppComponent implements OnInit, AfterViewInit {
     this.activeEnvironment$ = this.store.selectActiveEnvironment();
     this.activeRoute$ = this.store.selectActiveRoute();
     this.activeRouteResponse$ = this.store.selectActiveRouteResponse();
+    this.activeResponseFileMimeType$ = this.activeRouteResponse$.pipe(
+      pluck('filePath'),
+      filter((filePath) => !!filePath),
+      distinctUntilChanged(),
+      mergeMap((filePath) =>
+        from(MainApi.invoke('APP_GET_MIME_TYPE', filePath))
+      ),
+      map((mimeType) => ({
+        mimeType,
+        supportsTemplating: MimeTypesWithTemplating.indexOf(mimeType) > -1
+      }))
+    );
     this.activeRouteResponseIndex$ = this.store.selectActiveRouteResponseIndex();
     this.activeTab$ = this.store.select('activeTab');
     this.activeView$ = this.store.select('activeView');
@@ -195,7 +210,7 @@ export class AppComponent implements OnInit, AfterViewInit {
   }
 
   ngAfterViewInit() {
-    this.ipcService.init(this.changelogModal, this.settingsModal);
+    this.apiService.init(this.changelogModal, this.settingsModal);
   }
 
   /**
@@ -285,17 +300,16 @@ export class AppComponent implements OnInit, AfterViewInit {
 
     routeUrl += activeRoute.endpoint;
 
-    shell.openExternal(routeUrl);
+    MainApi.send('APP_OPEN_EXTERNAL_LINK', routeUrl);
   }
 
   /**
    * Open file browsing dialog
    */
   public async browseFiles() {
-    const dialogResult = await this.dialog.showOpenDialog(
-      this.BrowserWindow.getFocusedWindow(),
-      { title: 'Choose a file' }
-    );
+    const dialogResult = await MainApi.invoke('APP_SHOW_OPEN_DIALOG', {
+      title: 'Choose a file'
+    });
 
     if (dialogResult.filePaths && dialogResult.filePaths[0]) {
       this.activeRouteResponseForm
@@ -312,7 +326,7 @@ export class AppComponent implements OnInit, AfterViewInit {
   }
 
   public openWikiLink(linkName: string) {
-    shell.openExternal(Config.docs[linkName]);
+    MainApi.send('APP_OPEN_EXTERNAL_LINK', Config.docs[linkName]);
   }
 
   /**
@@ -376,20 +390,6 @@ export class AppComponent implements OnInit, AfterViewInit {
     } else if (subject === 'route') {
       this.importExportService.exportRouteToClipboard(subjectUUID);
     }
-  }
-
-  /**
-   * Get file mime type and check if supports templating
-   */
-  public getFileMimeType(
-    filePath: string
-  ): { mimeType: string; supportsTemplating: boolean } {
-    const mimeType = mimeTypeLookup(filePath) || 'none';
-
-    return {
-      mimeType,
-      supportsTemplating: MimeTypesWithTemplating.indexOf(mimeType) > -1
-    };
   }
 
   /**

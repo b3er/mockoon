@@ -1,16 +1,5 @@
-import { Injectable } from '@angular/core';
-import {
-  DataOptions,
-  get as storageGet,
-  set as storageSet
-} from 'electron-json-storage';
-import {
-  BehaviorSubject,
-  bindNodeCallback,
-  EMPTY,
-  Observable,
-  throwError
-} from 'rxjs';
+import { Injectable, NgZone } from '@angular/core';
+import { BehaviorSubject, EMPTY, from, Observable } from 'rxjs';
 import {
   catchError,
   concatMap,
@@ -19,20 +8,12 @@ import {
   tap
 } from 'rxjs/operators';
 import { Logger } from 'src/app/classes/logger';
+import { MainApi } from 'src/app/global';
 import { ToastsService } from 'src/app/services/toasts.service';
 
 @Injectable({ providedIn: 'root' })
 export class StorageService {
   private logger = new Logger('[SERVICE][STORAGE]');
-  private storageSet$ = bindNodeCallback(
-    (
-      key: string,
-      json: any,
-      options: DataOptions,
-      callback: (error: any) => void
-    ) => storageSet(key, json, options, callback)
-  );
-  private storageGet$ = bindNodeCallback<string, any>(storageGet);
   private saving$ = new BehaviorSubject<boolean>(false);
 
   constructor(private toastsService: ToastsService) {}
@@ -58,7 +39,7 @@ export class StorageService {
    * @param key
    */
   public loadData<T>(key: string): Observable<T> {
-    return this.storageGet$(key).pipe(
+    return from(MainApi.invoke<T>('APP_READ_JSON_DATA', key)).pipe(
       catchError((error) => {
         const errorMessage = `Error while loading ${key}`;
 
@@ -71,7 +52,7 @@ export class StorageService {
           `${errorMessage}. Please restart the application.`
         );
 
-        return throwError(errorMessage);
+        return EMPTY;
       })
     );
   }
@@ -97,7 +78,7 @@ export class StorageService {
       }),
       debounceTime(interval),
       concatMap((data) =>
-        this.storageSet$(key, data, null).pipe(
+        from(MainApi.invoke<T>('APP_WRITE_JSON_DATA', key, data)).pipe(
           catchError((error) => {
             const errorMessage = `Error while saving ${key}`;
 

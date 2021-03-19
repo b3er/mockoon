@@ -1,10 +1,33 @@
 import {
   Environment,
   GetRouteResponseContentType,
-  ListDuplicatedRouteUUIDs
+  Route
 } from '@mockoon/commons';
 import { GetEditorModeFromContentType } from 'src/app/libs/utils.lib';
 import { DuplicatedRoutesTypes, StoreType } from 'src/app/stores/store';
+
+/**
+ * Return a Set of the duplicated route UUIDs in an environment
+ *
+ * @param environment
+ */
+const ListDuplicatedRouteUUIDs = (environment: Environment): Set<string> => {
+  const duplicates = new Set<string>();
+
+  environment.routes.forEach((route: Route, routeIndex: number) => {
+    environment.routes.forEach((otherRoute: Route, otherRouteIndex: number) => {
+      if (
+        otherRouteIndex > routeIndex &&
+        otherRoute.endpoint === route.endpoint &&
+        otherRoute.method === route.method
+      ) {
+        duplicates.add(otherRoute.uuid);
+      }
+    });
+  });
+
+  return duplicates;
+};
 
 /**
  * Return the body editor "mode" from the currently selected env / route response

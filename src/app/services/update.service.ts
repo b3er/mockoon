@@ -1,7 +1,7 @@
 import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 import { spawn } from 'child_process';
-import { remote, shell } from 'electron';
+import { remote } from 'electron';
 import {
   createWriteStream,
   existsSync,
@@ -9,14 +9,14 @@ import {
   rename,
   unlink
 } from 'fs';
-import { platform } from 'os';
 import { get as requestGet } from 'request';
 import { BehaviorSubject } from 'rxjs';
 import { gt as semverGt } from 'semver';
 import { Logger } from 'src/app/classes/logger';
 import { Config } from 'src/app/config';
+import { MainApi } from 'src/app/global';
 
-/**
+/**TODO
  * Auto update for windows (with temp file and old update file deletion)
  * Download trigger for mac and linux
  *
@@ -36,7 +36,7 @@ export class UpdateService {
   private nextVersionFileName: string;
   private userDataPath = remote.app.getPath('userData') + '/';
   private logger = new Logger('[SERVICE][UPDATE]');
-  private platform = platform();
+  private platform = ''; // TODO
 
   constructor(private http: HttpClient) {
     // always remove temp file
@@ -110,7 +110,10 @@ export class UpdateService {
         }).unref();
         remote.app.quit();
       } else if (this.platform === 'darwin' || this.platform === 'linux') {
-        shell.openExternal(`${Config.githubTagReleaseUrl}${this.nextVersion}`);
+        MainApi.send(
+          'APP_OPEN_EXTERNAL_LINK',
+          `${Config.githubTagReleaseUrl}${this.nextVersion}`
+        );
       }
     }
   }

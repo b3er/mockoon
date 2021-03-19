@@ -8,11 +8,11 @@ import {
   ViewChild
 } from '@angular/core';
 import { NgbModal, NgbModalOptions } from '@ng-bootstrap/ng-bootstrap';
-import { shell } from 'electron';
 import { Observable } from 'rxjs';
 import { filter, first, map, shareReplay, tap } from 'rxjs/operators';
 import { gt as semverGt } from 'semver';
 import { Config } from 'src/app/config';
+import { MainApi } from 'src/app/global';
 import { updateSettingsAction } from 'src/app/stores/actions';
 import { Store } from 'src/app/stores/store';
 
@@ -72,7 +72,10 @@ export class ChangelogModalComponent implements OnInit, AfterViewInit {
   }
 
   public openReleaseLink() {
-    shell.openExternal(Config.githubTagReleaseUrl + Config.appVersion);
+    MainApi.send(
+      'APP_OPEN_EXTERNAL_LINK',
+      Config.githubTagReleaseUrl + Config.appVersion
+    );
   }
 
   public showModal() {

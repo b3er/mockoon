@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, OnInit } from '@angular/core';
-import { shell } from 'electron';
 import { Observable } from 'rxjs';
 import { filter, first, mergeMap } from 'rxjs/operators';
+import { MainApi } from 'src/app/global';
 import { Banner } from 'src/app/models/remote-config.model';
 import { RemoteConfigService } from 'src/app/services/remote-config.service';
 import { SettingsService } from 'src/app/services/settings.service';
@@ -38,7 +38,7 @@ export class BannerComponent implements OnInit {
    * Open banner link
    */
   public openLink(banner: Banner) {
-    shell.openExternal(banner.link);
+    MainApi.send('APP_OPEN_EXTERNAL_LINK', banner.link);
   }
 
   /**

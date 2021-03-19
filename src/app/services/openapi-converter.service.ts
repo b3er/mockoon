@@ -1,5 +1,4 @@
 import { Injectable } from '@angular/core';
-import * as SwaggerParser from '@apidevtools/swagger-parser';
 import {
   Environment,
   GetRouteResponseContentType,
@@ -16,7 +15,6 @@ import { Errors } from 'src/app/enums/errors.enum';
 import { RemoveLeadingSlash } from 'src/app/libs/utils.lib';
 import { SchemasBuilderService } from 'src/app/services/schemas-builder.service';
 import { ToastsService } from 'src/app/services/toasts.service';
-import { parse as urlParse } from 'url';
 
 type ParametersTypes = 'PATH_PARAMETERS' | 'SERVER_VARIABLES';
 type SpecificationVersions = 'SWAGGER' | 'OPENAPI_V3';
@@ -46,11 +44,13 @@ export class OpenAPIConverterService {
     this.logger.info(`Started importing OpenAPI file '${filePath}' import`);
 
     try {
-      const parsedAPI:
+      /* const parsedAPI:
         | OpenAPIV2.Document
         | OpenAPIV3.Document = await SwaggerParser.dereference(filePath, {
         dereference: { circular: 'ignore' }
-      });
+      }); */
+      // TODO
+      const parsedAPI = null;
 
       if (this.isSwagger(parsedAPI)) {
         return this.convertFromSwagger(parsedAPI);
@@ -135,13 +135,13 @@ export class OpenAPIConverterService {
 
     if (server?.[0]?.url) {
       newEnvironment.endpointPrefix = RemoveLeadingSlash(
-        urlParse(
+        new URL(
           this.parametersReplace(
             server[0].url,
             'SERVER_VARIABLES',
             server[0].variables
           )
-        ).path
+        ).pathname
       );
     }
 
@@ -241,7 +241,7 @@ export class OpenAPIConverterService {
     };
 
     try {
-      SwaggerParser.validate(openAPIEnvironment);
+      //SwaggerParser.validate(openAPIEnvironment);
     } catch (error) {
       this.logger.error(
         `Error while validating OpenAPI export object: ${error.message}`

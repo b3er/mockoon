@@ -1,0 +1,4 @@
+# Query: electron
+
+src\app\services\update.service.ts:
+  4: import { remote } from 'electron';
